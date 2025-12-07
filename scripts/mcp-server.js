@@ -82,8 +82,18 @@ const server = http.createServer((req, res) => {
     res.end('Not Found');
 });
 
-// WebSocket server without auto-attach; we'll manually handle upgrade for subprotocol negotiation
-const wss = new WebSocketServer({ noServer: true });
+// Attach WebSocketServer to HTTP server with path, and negotiate subprotocols properly
+const wss = new WebSocketServer({
+    server,
+    path: PATH,
+    handleProtocols: (protocols) => {
+        // protocols is a Set of requested protocols
+        const requested = Array.from(protocols || []);
+        if (requested.includes('mcp')) return 'mcp';
+        if (requested.includes('jsonrpc')) return 'jsonrpc';
+        return false; // no subprotocol
+    },
+});
 
 // Handle connection
 wss.on('connection', (ws, request) => {
@@ -177,40 +187,7 @@ wss.on('connection', (ws, request) => {
     });
 });
 
-// Upgrade handler to require path and negotiate subprotocols
-server.on('upgrade', (request, socket, head) => {
-    try {
-        const { url, headers } = request;
-        if (!url || !url.startsWith(PATH)) {
-            socket.destroy();
-            return;
-        }
-
-        // Client requested subprotocols (comma-separated)
-        const requested = (headers['sec-websocket-protocol'] || '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
-
-        // Prefer 'mcp', otherwise allow 'jsonrpc', otherwise none
-        let selected = '';
-        if (requested.includes('mcp')) selected = 'mcp';
-        else if (requested.includes('jsonrpc')) selected = 'jsonrpc';
-
-        wss.handleUpgrade(request, socket, head, (ws) => {
-            wss.emit('connection', ws, request);
-            // Set the selected protocol on the socket
-            if (selected) {
-                try {
-                    ws._socket.protocol = selected; // internal
-                } catch { }
-            }
-        });
-    } catch (e) {
-        log.error('upgrade error', e);
-        socket.destroy();
-    }
-});
+// No manual upgrade handler needed when attaching to server with path; ws handles headers including Sec-WebSocket-Protocol
 
 server.listen(MCP_PORT, MCP_HOST, () => {
     log.info(`QIQ MCP server listening on ws://${MCP_HOST}:${MCP_PORT}${PATH}`);
