@@ -4,7 +4,8 @@ import { WebSocketServer } from 'ws';
 
 dotenv.config();
 
-const MCP_PORT = parseInt(process.env.MCP_PORT || '3001', 10);
+// Cloud Run sets PORT env; prefer it, fallback to MCP_PORT then default 3001
+const MCP_PORT = parseInt(process.env.PORT || process.env.MCP_PORT || '3001', 10);
 const MCP_HOST = process.env.MCP_HOST || '0.0.0.0';
 const PATH = '/mcp';
 const SUPPORTED_SUBPROTOCOLS = ['mcp', 'jsonrpc'];
