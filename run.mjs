@@ -1,5 +1,5 @@
 import http from 'http';
-import { createMcpServer } from './mcp.mjs';
+import { createMcpServer } from './src/mcp.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const PATH = '/mcp';
