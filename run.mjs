@@ -1,10 +1,7 @@
 import express from 'express';
-import { createMcpServer, getTools, handleJsonRpc } from './src/mcp.mjs';
+import { getTools, handleJsonRpc } from './src/mcp.mjs';
 
-// Keep existing WebSocket server untouched (created via mcp.mjs)
 const PORT = Number(process.env.PORT || 8080);
-// Avoid port conflict: run WebSocket server on PORT+1, HTTP/SSE on PORT
-createMcpServer({ host: '0.0.0.0', port: PORT + 1, path: '/mcp' });
 
 const app = express();
 app.use(express.json({ type: 'application/json' }));
@@ -14,28 +11,16 @@ app.get('/mcp', (_req, res) => {
     res.status(426).json({ error: 'Upgrade Required' });
 });
 
-// SSE endpoint bridging JSON-RPC over HTTP
-app.get('/mcp/sse', (req, res) => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders?.();
-
-    // Initial connected event
-    res.write('event: connected\n');
-    res.write('data: {"status":"ok"}\n\n');
-
-    // For demo purposes, if the client sends messages via query (?msg=...)
-    // or a POST to /mcp/sse with JSON, we could bridge — here we keep it simple:
-    // Clients are expected to POST JSON-RPC to /mcp/http and receive SSE responses.
-
-    // Keep-alive ping every 25s
-    const interval = setInterval(() => {
-        res.write('event: ping\n');
-        res.write('data: "keep-alive"\n\n');
-    }, 25000);
-
-    req.on('close', () => { clearInterval(interval); });
+// SSE endpoint – send initial initialize message (Agent Builder expects this)
+app.get('/mcp/sse', async (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+    });
+    const initialize = await handleJsonRpc({ jsonrpc: '2.0', id: 0, method: 'initialize', params: {} });
+    res.write('event: message\n');
+    res.write(`data: ${JSON.stringify(initialize)}\n\n`);
 });
 
 // Optional HTTP JSON-RPC endpoint to produce SSE-compatible responses
@@ -50,19 +35,4 @@ app.get('/', (_req, res) => {
     res.json({ name: 'MCP_HTTP_SSE+WS', tools: getTools() });
 });
 
-const server = app.listen(PORT, '0.0.0.0');
-export default server;
-
-// Enable simple SSE endpoint at /sse that streams a single initialize event
-server.on('request', async (req, res) => {
-    if (req.method === 'GET' && req.url === '/sse') {
-        const initializeResponse = await handleJsonRpc({ jsonrpc: '2.0', id: 0, method: 'initialize' });
-        res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-        });
-        res.write('event: message\n');
-        res.write(`data: ${JSON.stringify(initializeResponse)}\n\n`);
-    }
-});
+app.listen(PORT, '0.0.0.0', () => console.log(`MCP Server running on PORT ${PORT}`));
