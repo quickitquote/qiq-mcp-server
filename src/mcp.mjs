@@ -1,4 +1,3 @@
-import http from 'http';
 import { WebSocketServer } from 'ws';
 
 /**
@@ -20,8 +19,6 @@ import { WebSocketServer } from 'ws';
 export function createMcpServer(options = {}) {
     const NAME = options.name || 'MCP_GENERIC';
     const VERSION = options.version || '0.1.0';
-    const HOST = options.host || '0.0.0.0';
-    const PORT = Number(process.env.PORT || options.port || 8080);
     const PATH = options.path || '/mcp';
     const logger = options.logger || {
         info: (...a) => console.log('[INFO ]', ...a),
@@ -53,34 +50,8 @@ export function createMcpServer(options = {}) {
         return { jsonrpc: '2.0', id, error: err };
     }
 
-    // HTTP server: health on '/', 426 on PATH for non-WS
-    const httpServer = http.createServer((req, res) => {
-        if (req.url === PATH) {
-            res.statusCode = 426; // Upgrade Required
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'WebSocket-only endpoint. Upgrade with ws/wss.' }));
-            return;
-        }
-        if (req.url === '/') {
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ name: NAME, version: VERSION, status: 'ok' }));
-            return;
-        }
-        res.statusCode = 404;
-        res.end('Not Found');
-    });
-
-    const wsServer = new WebSocketServer({
-        server: httpServer,
-        path: PATH,
-        handleProtocols: (protocols) => {
-            const requested = Array.from(protocols || []);
-            if (requested.includes('mcp')) return 'mcp';
-            if (requested.includes('jsonrpc')) return 'jsonrpc';
-            return false;
-        },
-    });
+    // Use noServer mode so the HTTP server can control upgrade routing (Cloud Run safe)
+    const wsServer = new WebSocketServer({ noServer: true });
 
     // Register / get tools API
     function registerTool(name, def) {
@@ -98,8 +69,8 @@ export function createMcpServer(options = {}) {
         }));
     }
 
-    // Connection handler supporting multiple clients
-    wsServer.on('connection', (ws, request) => {
+    // Per-connection handler (supports multiple clients)
+    function onConnection(ws, request) {
         logger.info('WS connected', request?.socket?.remoteAddress);
 
         ws.on('message', async (data) => {
@@ -164,29 +135,25 @@ export function createMcpServer(options = {}) {
         ws.on('error', (e) => {
             logger.error('WS error', e);
         });
-    });
+    }
 
-    function start() {
-        return new Promise((resolve, reject) => {
-            httpServer.listen(PORT, HOST, () => {
-                logger.info(`MCP server listening on ws://${HOST}:${PORT}${PATH}`);
-                resolve();
-            });
-            httpServer.on('error', reject);
-        });
+    // Helper to perform subprotocol negotiation and attach handlers
+    function handleUpgrade(ws, request) {
+        // Note: In noServer mode, Sec-WebSocket-Protocol negotiation is done by the HTTP upgrade logic.
+        // If you need to enforce protocols, inspect request.headers['sec-websocket-protocol'] here.
+        onConnection(ws, request);
     }
 
     function stop() {
         return new Promise((resolve) => {
             try {
-                wsServer.close(() => {
-                    httpServer.close(() => resolve());
-                });
+                wsServer.close(() => resolve());
             } catch (_) {
                 resolve();
             }
         });
     }
 
-    return { httpServer, wsServer, start, stop, registerTool, getTools };
+    // Return only generic hooks, no assumptions about HTTP server
+    return { wsServer, handleUpgrade, registerTool, getTools };
 }
