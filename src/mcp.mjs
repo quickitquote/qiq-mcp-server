@@ -199,6 +199,9 @@ export function createMcpServer(options = {}) {
             socket.destroy();
             return;
         }
+        // Debug: log requested subprotocols (if any)
+        const requestedProto = req.headers['sec-websocket-protocol'];
+        logger.info('HTTP upgrade → WS', { url: req.url, requestedProto });
         wsServer.handleUpgrade(req, socket, head, (ws) => handleUpgrade(ws, req));
     });
 
