@@ -59,4 +59,9 @@ app.get('/', (_req, res) => {
     res.json({ ok: true, tools: getTools() });
 });
 
+// Agent Builder compatibility: return tools list
+app.get('/mcp/info', (_req, res) => {
+    res.json({ ok: true, tools: getTools() });
+});
+
 app.listen(PORT, '0.0.0.0', () => console.log(`MCP Server running on PORT ${PORT}`));
