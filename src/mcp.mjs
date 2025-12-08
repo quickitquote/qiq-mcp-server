@@ -86,16 +86,12 @@ export function createMcpServer(options = {}) {
         return getTools();
     }
     function getTools() {
-        // Return both camelCase and snake_case to maximize client compatibility
+        // Return camelCase fields per MCP HTTP spec; keep content consistent
         return Array.from(tools.values()).map((t) => ({
             name: t.name,
             description: t.description || '',
-            // camelCase (some clients expect this)
             inputSchema: t.inputSchema || { type: 'object' },
             outputSchema: t.outputSchema || { type: 'object' },
-            // snake_case (Agent Builder currently expects this)
-            input_schema: t.inputSchema || { type: 'object' },
-            output_schema: t.outputSchema || { type: 'object' },
         }));
     }
 
@@ -125,8 +121,7 @@ export function createMcpServer(options = {}) {
                         break;
                     }
                     case 'tools/list': {
-                        const listed = getTools();
-                        ws.send(JSON.stringify(makeResult(id, { tools: listed })));
+                        ws.send(JSON.stringify(makeResult(id, { tools: getTools() })));
                         break;
                     }
                     case 'tools/call': {
@@ -224,4 +219,46 @@ export function createMcpServer(options = {}) {
 
     // Return hooks and servers for integration
     return { httpServer, wsServer, handleUpgrade, registerTool, getTools };
+}
+
+// Unified JSON-RPC dispatcher for HTTP/SSE transport
+export function handleJsonRpc(input) {
+    try {
+        const { id, method, params } = input || {};
+        const makeResult = (result) => ({ jsonrpc: '2.0', id, result });
+        const makeErr = (code, message, data) => {
+            const err = { code, message };
+            if (data !== undefined) err.data = data;
+            return { jsonrpc: '2.0', id: id ?? null, error: err };
+        };
+        switch (method) {
+            case 'initialize':
+                return makeResult({
+                    protocolVersion: '2024-11-05',
+                    serverInfo: { name: 'MCP_GENERIC', version: '0.1.0' },
+                    capabilities: { tools: { listChanged: false } },
+                });
+            case 'tools/list':
+                return makeResult({ tools: Array.from((function(){return Array.from(tools.values()).map(t=>({
+                    name: t.name,
+                    description: t.description || '',
+                    inputSchema: t.inputSchema || { type: 'object' },
+                    outputSchema: t.outputSchema || { type: 'object' },
+                }))})()) });
+            case 'tools/call': {
+                const name = params?.name;
+                const args = params?.arguments;
+                const tool = name && tools.get(name);
+                if (!tool) return makeErr(-32601, `Method not found: tool ${name}`);
+                return Promise.resolve(tool.call(args || {}))
+                    .then((result) => makeResult(result))
+                    .catch(() => makeErr(-32000, 'Tool invocation error'));
+            }
+            default:
+                return makeErr(-32601, `Method not found: ${method}`);
+        }
+    } catch (e) {
+        const err = { code: -32700, message: 'Parse error' };
+        return { jsonrpc: '2.0', id: null, error: err };
+    }
 }

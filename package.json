@@ -18,6 +18,7 @@
     "author": "",
     "license": "MIT",
     "dependencies": {
-        "ws": "^8.18.0"
+        "ws": "^8.18.0",
+        "express": "^4.19.2"
     }
 }
