@@ -52,3 +52,17 @@ app.get('/', (_req, res) => {
 
 const server = app.listen(PORT, '0.0.0.0');
 export default server;
+
+// Enable simple SSE endpoint at /sse that streams a single initialize event
+server.on('request', async (req, res) => {
+    if (req.method === 'GET' && req.url === '/sse') {
+        const initializeResponse = await handleJsonRpc({ jsonrpc: '2.0', id: 0, method: 'initialize' });
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        });
+        res.write('event: message\n');
+        res.write(`data: ${JSON.stringify(initializeResponse)}\n\n`);
+    }
+});

@@ -1,16 +1,13 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
-# Copy manifests first for layer caching
-COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
-RUN npm ci --only=production || npm install --production
+COPY package.json package-lock.json* ./
+RUN npm install --production
 
-# Copy sources
 COPY . .
 
-# Cloud Run provides PORT; code falls back to 8080
-ENV NODE_ENV=production
+ENV PORT=8080
+EXPOSE 8080
 
-# Generic entrypoint (does not assume specific filenames elsewhere)
 CMD ["node", "run.mjs"]
