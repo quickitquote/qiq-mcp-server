@@ -1,0 +1,41 @@
+# Cloud Build configuration for qiq-mcp-server
+# Builds and pushes a Docker image to Artifact Registry.
+# Make sure the Artifact Registry repository exists first:
+#   gcloud artifacts repositories create ${_REPOSITORY} \
+#     --repository-format=docker --location=${_REGION}
+# And grant Cloud Build SA writer access if needed.
+
+substitutions:
+  _REGION: europe-west1     # Change if you use a different region
+  _REPOSITORY: mcp-server   # Artifact Registry repo name (must exist)
+  _IMAGE: mcp-server        # Image name inside the repo
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build image'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$COMMIT_SHA'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:latest'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push commit tag'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push latest tag'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:latest'
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$COMMIT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:latest'
