@@ -1,38 +1,49 @@
 import http from 'http';
-import { WebSocketServer } from 'ws';
-import { createMcpServer } from './src/mcp.mjs';
+import { createMcpServer } from './mcp.mjs';
 
-// HTTP server with health and 426 on non-upgraded MCP path
+const PORT = process.env.PORT || 8080;
+const PATH = '/mcp';
+
+// create MCP server
+const { wsServer, handleUpgrade } = createMcpServer({
+    name: "QIQ_MCP",
+    version: "1.0.0",
+    path: PATH,
+});
+
+// create HTTP server
 const server = http.createServer((req, res) => {
     if (req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ name: 'QIQ_MCP_GENERIC', version: '1.0.0', status: 'ok' }));
-    } else {
-        res.writeHead(426, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'WebSocket-only endpoint. Upgrade with ws/wss.' }));
+        res.end(JSON.stringify({ status: "ok", name: "QIQ_MCP" }));
+        return;
     }
-});
 
-// noServer mode; HTTP controls upgrade routing
-const wss = new WebSocketServer({ noServer: true });
-
-const { handleUpgrade } = createMcpServer({
-    name: 'QIQ_MCP_GENERIC',
-    version: '1.0.0',
-    path: '/mcp',
-});
-
-server.on('upgrade', (req, socket, head) => {
-    if (req.url === '/mcp') {
-        wss.handleUpgrade(req, socket, head, (ws) => {
-            handleUpgrade(ws, req);
+    // No direct HTTP access to /mcp
+    if (req.url.startsWith(PATH)) {
+        res.writeHead(426, {
+            'Content-Type': 'application/json'
         });
-    } else {
-        socket.destroy();
+        res.end(JSON.stringify({ error: "WebSocket-only endpoint. Upgrade with ws/wss." }));
+        return;
     }
+
+    res.writeHead(404);
+    res.end('Not Found');
 });
 
-const PORT = process.env.PORT || 8080;
+// Upgrade → WebSocket handshake
+server.on('upgrade', (req, socket, head) => {
+    if (req.url !== PATH) {
+        socket.destroy();
+        return;
+    }
+    wsServer.handleUpgrade(req, socket, head, (ws) => {
+        handleUpgrade(ws, req);
+    });
+});
+
+// Start server
 server.listen(PORT, () => {
-    console.log('MCP server running on port', PORT);
+    console.log(`MCP server running on port ${PORT}`);
 });
