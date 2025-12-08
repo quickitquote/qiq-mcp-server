@@ -2,7 +2,9 @@ import express from 'express';
 import { createMcpServer, getTools, handleJsonRpc } from './src/mcp.mjs';
 
 // Keep existing WebSocket server untouched (created via mcp.mjs)
-createMcpServer({ host: '0.0.0.0', port: Number(process.env.PORT || 8080), path: '/mcp' });
+const PORT = Number(process.env.PORT || 8080);
+// Avoid port conflict: run WebSocket server on PORT+1, HTTP/SSE on PORT
+createMcpServer({ host: '0.0.0.0', port: PORT + 1, path: '/mcp' });
 
 const app = express();
 app.use(express.json({ type: 'application/json' }));
@@ -48,6 +50,5 @@ app.get('/', (_req, res) => {
     res.json({ name: 'MCP_HTTP_SSE+WS', tools: getTools() });
 });
 
-const PORT = Number(process.env.PORT || 8080);
 const server = app.listen(PORT, '0.0.0.0');
 export default server;

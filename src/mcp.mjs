@@ -1,6 +1,46 @@
 import http from 'http';
 import { WebSocketServer } from 'ws';
 
+// Module-scoped tool registry so both WS and HTTP/SSE can share state
+const tools = new Map();
+
+// Default example tool: ping (module-level)
+tools.set('ping', {
+    name: 'ping',
+    description: 'Simple ping tool that returns {status:"ok"}'.replace(/\n/g, ' '),
+    inputSchema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+    },
+    outputSchema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { status: { type: 'string' } },
+        required: ['status'],
+        additionalProperties: false,
+    },
+    call: async () => ({ status: 'ok' }),
+});
+
+// Module-scoped helpers to manage tools
+export function getTools() {
+    return Array.from(tools.values()).map((t) => ({
+        name: t.name,
+        description: t.description || '',
+        inputSchema: t.inputSchema || { type: 'object' },
+        outputSchema: t.outputSchema || { type: 'object' },
+    }));
+}
+export function registerTool(name, def) {
+    if (!name || typeof name !== 'string') throw new Error('Tool name must be a string');
+    if (!def || typeof def.call !== 'function') throw new Error('Tool def must have call()');
+    tools.set(name, { name, ...def });
+    return getTools();
+}
+
 /**
  * Minimal MCP-compliant WebSocket server with JSON-RPC 2.0.
  * Dynamic, framework-free, and reusable.
@@ -31,29 +71,7 @@ export function createMcpServer(options = {}) {
 
     const SUPPORTED_SUBPROTOCOLS = ['mcp', 'jsonrpc'];
 
-    // Tool registry (dynamic)
-    const tools = new Map();
-
-    // Default example tool: ping
-    registerTool('ping', {
-        description: 'Simple ping tool that returns {status:"ok"}'.replace(/\n/g, ' '),
-        // Provide explicit JSON Schema with $schema to match MCP expectations
-        inputSchema: {
-            $schema: 'https://json-schema.org/draft/2020-12/schema',
-            type: 'object',
-            properties: {},
-            required: [],
-            additionalProperties: false,
-        },
-        outputSchema: {
-            $schema: 'https://json-schema.org/draft/2020-12/schema',
-            type: 'object',
-            properties: { status: { type: 'string' } },
-            required: ['status'],
-            additionalProperties: false,
-        },
-        call: async () => ({ status: 'ok' }),
-    });
+    // Tools are module-scoped and already contain default ping
 
     // JSON-RPC helpers
     function makeResult(id, result) {
@@ -78,22 +96,7 @@ export function createMcpServer(options = {}) {
         },
     });
 
-    // Register / get tools API
-    function registerTool(name, def) {
-        if (!name || typeof name !== 'string') throw new Error('Tool name must be a string');
-        if (!def || typeof def.call !== 'function') throw new Error('Tool def must have call()');
-        tools.set(name, { name, ...def });
-        return getTools();
-    }
-    function getTools() {
-        // Return camelCase fields per MCP HTTP spec; keep content consistent
-        return Array.from(tools.values()).map((t) => ({
-            name: t.name,
-            description: t.description || '',
-            inputSchema: t.inputSchema || { type: 'object' },
-            outputSchema: t.outputSchema || { type: 'object' },
-        }));
-    }
+    // Register / get tools API (module-scoped)
 
     // Per-connection handler (supports multiple clients)
     function onConnection(ws, request) {
@@ -240,14 +243,12 @@ export function handleJsonRpc(input) {
                 });
             case 'tools/list':
                 return makeResult({
-                    tools: Array.from((function () {
-                        return Array.from(tools.values()).map(t => ({
-                            name: t.name,
-                            description: t.description || '',
-                            inputSchema: t.inputSchema || { type: 'object' },
-                            outputSchema: t.outputSchema || { type: 'object' },
-                        }))
-                    })())
+                    tools: Array.from(tools.values()).map(t => ({
+                        name: t.name,
+                        description: t.description || '',
+                        inputSchema: t.inputSchema || { type: 'object' },
+                        outputSchema: t.outputSchema || { type: 'object' },
+                    }))
                 });
             case 'tools/call': {
                 const name = params?.name;
@@ -266,3 +267,5 @@ export function handleJsonRpc(input) {
         return { jsonrpc: '2.0', id: null, error: err };
     }
 }
+
+// (getTools is exported above as a named export)
