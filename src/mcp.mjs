@@ -36,10 +36,22 @@ export function createMcpServer(options = {}) {
 
     // Default example tool: ping
     registerTool('ping', {
-        description: 'Simple ping tool that returns {status:"ok"}'.
-            replace(/\n/g, ' '),
-        inputSchema: { type: 'object', properties: {}, additionalProperties: true },
-        outputSchema: { type: 'object', properties: { status: { type: 'string' } }, required: ['status'] },
+        description: 'Simple ping tool that returns {status:"ok"}'.replace(/\n/g, ' '),
+        // Provide explicit JSON Schema with $schema to match MCP expectations
+        inputSchema: {
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            type: 'object',
+            properties: {},
+            required: [],
+            additionalProperties: false,
+        },
+        outputSchema: {
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            type: 'object',
+            properties: { status: { type: 'string' } },
+            required: ['status'],
+            additionalProperties: false,
+        },
         call: async () => ({ status: 'ok' }),
     });
 
