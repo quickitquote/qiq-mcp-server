@@ -53,12 +53,13 @@ export function createMcpServer(options = {}) {
     // Use noServer mode so the HTTP server can control upgrade routing (Cloud Run safe)
     const wsServer = new WebSocketServer({
         noServer: true,
-        // Negotiate subprotocols: prefer 'mcp', then 'jsonrpc'
+        // Negotiate subprotocols: prefer 'mcp', then 'jsonrpc'; fallback to 'mcp' if none provided
         handleProtocols: (protocols) => {
             const requested = Array.from(protocols || []);
             if (requested.includes('mcp')) return 'mcp';
             if (requested.includes('jsonrpc')) return 'jsonrpc';
-            return false;
+            // Agent Builder does not send a subprotocol; default to 'mcp' to allow connection
+            return 'mcp';
         },
     });
 
