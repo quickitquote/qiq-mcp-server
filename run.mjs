@@ -1,6 +1,6 @@
-import { createMcpServer } from './src/mcp.mjs';
-import { WebSocketServer } from 'ws';
 import http from 'http';
+import { WebSocketServer } from 'ws';
+import { createMcpServer } from './src/mcp.mjs';
 
 // HTTP server with health and 426 on non-upgraded MCP path
 const server = http.createServer((req, res) => {
