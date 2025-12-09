@@ -76,20 +76,31 @@ export function handleJsonRpc(input) {
 
 // --- Built-in tools: Typesense search and QIQ scoring ---
 // Environment-driven configuration so the server can run without hardcoding
-const TS_HOST = process.env.TYPESENSE_HOST?.trim();
-const TS_PROTOCOL = process.env.TYPESENSE_PROTOCOL?.trim(); // http|https
+const sanitize = (v) => {
+    if (v === undefined || v === null) return undefined;
+    const s = String(v).trim();
+    // Remove wrapping single or double quotes, if present
+    const unq = s.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
+    return unq.trim();
+};
+
+const TS_HOST = sanitize(process.env.TYPESENSE_HOST);
+const TS_PROTOCOL = sanitize(process.env.TYPESENSE_PROTOCOL); // http|https
 const TS_PORT = (() => {
-    const raw = process.env.TYPESENSE_PORT;
-    if (raw && String(raw).trim() !== '') return Number(raw);
+    const raw = sanitize(process.env.TYPESENSE_PORT);
+    if (raw && raw !== '') {
+        const n = Number(raw);
+        if (!Number.isNaN(n)) return n;
+    }
     if (TS_PROTOCOL === 'https') return 443;
     if (TS_PROTOCOL === 'http') return 80;
     return undefined;
 })();
 // Prefer search-only key, then general API key, then admin key; pick the first non-empty trimmed value
 const TS_API_KEY = [process.env.TYPESENSE_SEARCH_ONLY_KEY, process.env.TYPESENSE_API_KEY, process.env.TYPESENSE_ADMIN_API_KEY]
-    .find((v) => typeof v === 'string' && v.trim().length > 0);
-const TS_API_KEY_TRIMMED = TS_API_KEY ? String(TS_API_KEY).trim() : undefined;
-const TS_COLLECTION = process.env.TYPESENSE_COLLECTION;
+    .find((v) => typeof v === 'string' && sanitize(v)?.length > 0);
+const TS_API_KEY_TRIMMED = sanitize(TS_API_KEY);
+const TS_COLLECTION = sanitize(process.env.TYPESENSE_COLLECTION);
 
 let tsClient = null;
 try {
@@ -155,7 +166,7 @@ registerTool('typesense_search', {
         try {
             // Determine query_by fields once
             if (!cachedQueryBy) {
-                const envQueryBy = process.env.TYPESENSE_QUERY_BY?.trim();
+                const envQueryBy = sanitize(process.env.TYPESENSE_QUERY_BY);
                 if (envQueryBy) {
                     // Honor explicit override and skip schema discovery
                     cachedQueryBy = envQueryBy;
@@ -288,7 +299,7 @@ registerTool('typesense_health', {
             let connected = false;
             let fields = [];
             try {
-                const qb = cachedQueryBy || process.env.TYPESENSE_QUERY_BY?.trim() || 'name';
+                const qb = cachedQueryBy || sanitize(process.env.TYPESENSE_QUERY_BY) || 'name';
                 await tsClient.collections(TS_COLLECTION).documents().search({ q: '*', query_by: qb, per_page: 1 });
                 connected = true;
                 // If we don't have schema access, at least report the query_by we used
