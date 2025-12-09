@@ -85,7 +85,7 @@ const TS_PORT = (() => {
     if (TS_PROTOCOL === 'http') return 80;
     return undefined;
 })();
-const TS_API_KEY = process.env.TYPESENSE_SEARCH_ONLY_KEY || process.env.TYPESENSE_API_KEY;
+const TS_API_KEY = process.env.TYPESENSE_SEARCH_ONLY_KEY || process.env.TYPESENSE_API_KEY || process.env.TYPESENSE_ADMIN_API_KEY;
 const TS_COLLECTION = process.env.TYPESENSE_COLLECTION;
 
 let tsClient = null;
