@@ -163,4 +163,4 @@ The server supports a Typesense-backed search tool `typesense_search`. Configure
 - `TYPESENSE_COLLECTION`: e.g., `quickitquote_products`
 - `TYPESENSE_QUERY_BY`: optional, comma-separated list of string fields to search by (e.g., `name,description,brand,category`). If omitted, the server attempts to retrieve the collection schema to discover string fields; otherwise uses sensible defaults.
 
-Diagnostics: call `typesense_health` via JSON-RPC to verify connectivity and see fields used. With search-only keys, schema retrieval may not be permitted; in that case the tool reports the `query_by` fields it used.
+Diagnostics: call `typesense_health` via JSON-RPC to verify connectivity and see fields used. With search-only keys, schema retrieval may not be permitted; in that case the tool reports or uses the `query_by` fields provided via environment.
