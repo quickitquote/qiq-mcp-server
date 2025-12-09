@@ -73,6 +73,7 @@ jobs:
         if: ${{ steps.auth.outputs.has_ssh_key == 'true' }}
         run: |
           scp -i key.pem -o StrictHostKeyChecking=no ${{ steps.vars.outputs.env_file }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/qiq-mcp-server/.env
+          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd /opt/qiq-mcp-server && sudo git fetch --all && sudo git reset --hard origin/main && (sudo npm ci --only=production || sudo npm install --production) && sudo systemctl restart qiq-mcp-server && sudo systemctl status qiq-mcp-server --no-pager -l || true"
 
       - name: Upload env via password
         if: ${{ steps.auth.outputs.has_password == 'true' }}
@@ -80,6 +81,9 @@ jobs:
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" scp -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no ${{ steps.vars.outputs.env_file }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/qiq-mcp-server/.env || true
           # Fallback to ubuntu user if root is disabled
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" scp -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no ${{ steps.vars.outputs.env_file }} ubuntu@${{ secrets.SERVER_HOST }}:/opt/qiq-mcp-server/.env || true
+          # Apply latest code and restart service
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd /opt/qiq-mcp-server && sudo git fetch --all && sudo git reset --hard origin/main && (sudo npm ci --only=production || sudo npm install --production) && sudo systemctl restart qiq-mcp-server && sudo systemctl status qiq-mcp-server --no-pager -l || true" || true
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no ubuntu@${{ secrets.SERVER_HOST }} "cd /opt/qiq-mcp-server && sudo git fetch --all && sudo git reset --hard origin/main && (sudo npm ci --only=production || sudo npm install --production) && sudo systemctl restart qiq-mcp-server && sudo systemctl status qiq-mcp-server --no-pager -l || true" || true
 
       - name: Restart service via SSH key
         if: ${{ steps.auth.outputs.has_ssh_key == 'true' }}
