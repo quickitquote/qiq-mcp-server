@@ -115,6 +115,8 @@ const productSchema = {
     additionalProperties: true,
 };
 
+let cachedQueryBy = null;
+
 registerTool('typesense_search', {
     description: 'Search products from Typesense and return normalized product list.',
     inputSchema: {
@@ -148,14 +150,42 @@ registerTool('typesense_search', {
         }
 
         try {
-            const searchParams = {
-                q: keywords || '*',
-                query_by: 'name,description,brand,category',
+            // Determine query_by fields once
+            if (!cachedQueryBy) {
+                try {
+                    const schema = await tsClient.collections(TS_COLLECTION).retrieve();
+                    const strFields = (schema?.fields || [])
+                        .filter((f) => typeof f?.name === 'string' && String(f.type || '').startsWith('string'))
+                        .map((f) => f.name);
+                    cachedQueryBy = (strFields.length ? strFields : ['name','description','brand','category']).join(',');
+                } catch {
+                    cachedQueryBy = ['name','description','brand','category'].join(',');
+                }
+            }
+
+            let result;
+            const baseParams = {
+                q: keywords && String(keywords).trim() ? String(keywords) : '*',
                 per_page: 25,
             };
-            // Best-effort category filtering if collection supports it
-            if (category) searchParams.filter_by = `category:=${JSON.stringify(category)}`;
-            const result = await tsClient.collections(TS_COLLECTION).documents().search(searchParams);
+
+            // Attempt search with discovered query_by, then progressively degrade
+            const attempt = async (queryBy) => {
+                const params = { ...baseParams, query_by: queryBy };
+                if (category) params.filter_by = `category:=${JSON.stringify(category)}`;
+                return tsClient.collections(TS_COLLECTION).documents().search(params);
+            };
+
+            try {
+                result = await attempt(cachedQueryBy);
+            } catch {
+                try {
+                    result = await attempt('name');
+                } catch {
+                    result = await attempt('*'); // may still fail depending on schema
+                }
+            }
+
             const products = (result.hits || []).map((hit, idx) => {
                 const doc = hit.document || {};
                 const sku = doc.sku || doc.id || `TS-${idx + 1}`;
