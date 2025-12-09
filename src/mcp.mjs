@@ -85,15 +85,17 @@ const TS_PORT = (() => {
     if (TS_PROTOCOL === 'http') return 80;
     return undefined;
 })();
-const TS_API_KEY = process.env.TYPESENSE_SEARCH_ONLY_KEY || process.env.TYPESENSE_API_KEY || process.env.TYPESENSE_ADMIN_API_KEY;
+const TS_API_KEY = [process.env.TYPESENSE_SEARCH_ONLY_KEY, process.env.TYPESENSE_API_KEY, process.env.TYPESENSE_ADMIN_API_KEY]
+    .find((v) => v && String(v).trim() !== undefined);
+const TS_API_KEY_TRIMMED = TS_API_KEY ? String(TS_API_KEY).trim() : undefined;
 const TS_COLLECTION = process.env.TYPESENSE_COLLECTION;
 
 let tsClient = null;
 try {
-    if (TS_HOST && TS_PROTOCOL && TS_API_KEY && typeof TS_PORT === 'number' && !Number.isNaN(TS_PORT)) {
+    if (TS_HOST && TS_PROTOCOL && TS_API_KEY_TRIMMED && typeof TS_PORT === 'number' && !Number.isNaN(TS_PORT)) {
         tsClient = new Typesense.Client({
             nodes: [{ host: TS_HOST, port: TS_PORT, protocol: TS_PROTOCOL }],
-            apiKey: TS_API_KEY,
+            apiKey: TS_API_KEY_TRIMMED,
             connectionTimeoutSeconds: 5,
         });
     }
@@ -272,11 +274,22 @@ registerTool('typesense_health', {
         };
         try {
             if (!tsClient) return { ...base, error: 'Client not initialized' };
-            // Prefer health endpoint if available
-            try { await tsClient.health.retrieve(); } catch { /* ignore */ }
-            const schema = await tsClient.collections(TS_COLLECTION).retrieve();
-            const fields = (schema?.fields || []).map((f) => f?.name).filter(Boolean);
-            return { ...base, connected: true, fields };
+            // Attempt a lightweight search which should succeed with search-only key
+            let connected = false;
+            try {
+                await tsClient.collections(TS_COLLECTION).documents().search({ q: '*', query_by: 'name', per_page: 1 });
+                connected = true;
+            } catch {
+                // fall through; try health and schema
+            }
+            let fields = [];
+            try {
+                await tsClient.health.retrieve();
+                const schema = await tsClient.collections(TS_COLLECTION).retrieve();
+                fields = (schema?.fields || []).map((f) => f?.name).filter(Boolean);
+                connected = true;
+            } catch { /* ignore */ }
+            return { ...base, connected, fields };
         } catch (e) {
             return { ...base, error: (e && e.message) ? e.message : 'Unknown error' };
         }
