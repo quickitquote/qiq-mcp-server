@@ -1,0 +1,72 @@
+name: Deploy MCP env and restart service
+
+on:
+  workflow_dispatch:
+    inputs:
+      env_file:
+        description: Path to env file in repo (default .env.server)
+        required: false
+        default: .env.server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Validate secrets
+        run: |
+          test -n "${{ secrets.SERVER_HOST }}" || (echo "SERVER_HOST secret missing" && exit 1)
+          test -n "${{ secrets.SERVER_USER }}" || (echo "SERVER_USER secret missing" && exit 1)
+          if [ -z "${{ secrets.SERVER_SSH_KEY }}" ] && [ -z "${{ secrets.SERVER_PASSWORD }}" ]; then
+            echo "Provide either SERVER_SSH_KEY or SERVER_PASSWORD secrets" && exit 1
+          fi
+
+      - name: Set variables
+        id: vars
+        run: |
+          echo "env_file=${{ github.event.inputs.env_file || '.env.server' }}" >> $GITHUB_OUTPUT
+
+      - name: Write SSH key (if provided)
+        if: secrets.SERVER_SSH_KEY != ''
+        run: |
+          echo "${{ secrets.SERVER_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Install sshpass (for password auth)
+        if: secrets.SERVER_PASSWORD != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Upload env via SSH key
+        if: secrets.SERVER_SSH_KEY != ''
+        run: |
+          scp -i key.pem -o StrictHostKeyChecking=no ${{ steps.vars.outputs.env_file }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/qiq-mcp-server/.env
+
+      - name: Upload env via password
+        if: secrets.SERVER_PASSWORD != ''
+        run: |
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" scp -o StrictHostKeyChecking=no ${{ steps.vars.outputs.env_file }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/qiq-mcp-server/.env
+
+      - name: Restart service via SSH key
+        if: secrets.SERVER_SSH_KEY != ''
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo systemctl restart qiq-mcp-server && sudo systemctl status qiq-mcp-server --no-pager -l || true"
+
+      - name: Restart service via password
+        if: secrets.SERVER_PASSWORD != ''
+        run: |
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo systemctl restart qiq-mcp-server && sudo systemctl status qiq-mcp-server --no-pager -l || true"
+
+      - name: Verify MCP info
+        run: |
+          curl -s https://mcp.quickitquote.com/mcp/info -H "Authorization: Bearer ${{ secrets.MCP_TOKEN }}" || true
+
+      - name: Verify Typesense health
+        run: |
+          curl -s -X POST https://mcp.quickitquote.com/mcp/sse \
+            -H "Authorization: Bearer ${{ secrets.MCP_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"typesense_health","arguments":{}}}' || true

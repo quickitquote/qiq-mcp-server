@@ -1,3 +1,23 @@
+## Deployment via GitHub Actions (env sync)
+
+You can deploy the environment file to the server and restart the service using the workflow `.github/workflows/deploy-env.yml`.
+
+Required repo secrets:
+- `SERVER_HOST`: e.g., `109.199.105.196`
+- `SERVER_USER`: e.g., `root` or `ubuntu`
+- Provide ONE of:
+	- `SERVER_SSH_KEY`: private key for SSH (PEM format)
+	- `SERVER_PASSWORD`: password for SSH (used via sshpass)
+- `MCP_TOKEN`: Bearer token to verify HTTPS endpoints (optional but recommended)
+
+Manual trigger:
+- In GitHub → Actions → `Deploy MCP env and restart service` → `Run workflow`
+- Optionally set `env_file` input (defaults to `.env.server`).
+
+The workflow uploads the env file to `/opt/qiq-mcp-server/.env`, restarts `qiq-mcp-server`, and performs basic HTTPS checks.
+
+### Cloudflare Zero Trust SSH proxy
+If Cloudflare Zero Trust SSH proxy is enabled, the standard scp/ssh commands used by the workflow generally work as-is, provided your proxy is configured to accept connections from GitHub runners or you supply appropriate host/port settings and key credentials.
 # QuickItQuote MCP HTTP/SSE Server
 
 Minimal MCP server over HTTP + Server‑Sent Events (SSE) with token auth and CORS for OpenAI Agent Builder. Includes built‑in tools for Typesense search and QIQ scoring.
