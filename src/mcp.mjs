@@ -193,6 +193,10 @@ registerTool('typesense_search', {
             // Attempt search with discovered query_by, then progressively degrade
             const attempt = async (queryBy) => {
                 const params = { ...baseParams, query_by: queryBy };
+                const weights = sanitize(process.env.TYPESENSE_QUERY_BY_WEIGHTS);
+                if (weights && weights.split(',').filter(Boolean).length === queryBy.split(',').filter(Boolean).length) {
+                    params.query_by_weights = weights;
+                }
                 if (category) params.filter_by = `category:=${JSON.stringify(category)}`;
                 return tsClient.collections(TS_COLLECTION).documents().search(params);
             };
