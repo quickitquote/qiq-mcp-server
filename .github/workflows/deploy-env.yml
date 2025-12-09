@@ -1,6 +1,8 @@
 name: Deploy MCP env and restart service
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       env_file:
@@ -34,7 +36,7 @@ jobs:
           echo "use_secrets=${{ github.event.inputs.use_secrets || 'true' }}" >> $GITHUB_OUTPUT
 
       - name: Render .env from secrets
-        if: steps.vars.outputs.use_secrets == 'true'
+        if: ${{ steps.vars.outputs.use_secrets == 'true' }}
         run: |
           cat > .env.rendered << 'EOF'
           PORT=8080
@@ -50,34 +52,34 @@ jobs:
           echo "env_file=.env.rendered" >> $GITHUB_OUTPUT
 
       - name: Write SSH key (if provided)
-        if: secrets.SERVER_SSH_KEY != ''
+        if: ${{ secrets.SERVER_SSH_KEY != '' }}
         run: |
           echo "${{ secrets.SERVER_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
       - name: Install sshpass (for password auth)
-        if: secrets.SERVER_PASSWORD != ''
+        if: ${{ secrets.SERVER_PASSWORD != '' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y sshpass
 
       - name: Upload env via SSH key
-        if: secrets.SERVER_SSH_KEY != ''
+        if: ${{ secrets.SERVER_SSH_KEY != '' }}
         run: |
           scp -i key.pem -o StrictHostKeyChecking=no ${{ steps.vars.outputs.env_file }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/qiq-mcp-server/.env
 
       - name: Upload env via password
-        if: secrets.SERVER_PASSWORD != ''
+        if: ${{ secrets.SERVER_PASSWORD != '' }}
         run: |
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" scp -o StrictHostKeyChecking=no ${{ steps.vars.outputs.env_file }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/qiq-mcp-server/.env
 
       - name: Restart service via SSH key
-        if: secrets.SERVER_SSH_KEY != ''
+        if: ${{ secrets.SERVER_SSH_KEY != '' }}
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo systemctl restart qiq-mcp-server && sudo systemctl status qiq-mcp-server --no-pager -l || true"
 
       - name: Restart service via password
-        if: secrets.SERVER_PASSWORD != ''
+        if: ${{ secrets.SERVER_PASSWORD != '' }}
         run: |
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "sudo systemctl restart qiq-mcp-server && sudo systemctl status qiq-mcp-server --no-pager -l || true"
 
