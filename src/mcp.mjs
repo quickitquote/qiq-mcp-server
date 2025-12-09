@@ -76,15 +76,21 @@ export function handleJsonRpc(input) {
 
 // --- Built-in tools: Typesense search and QIQ scoring ---
 // Environment-driven configuration so the server can run without hardcoding
-const TS_HOST = process.env.TYPESENSE_HOST;
-const TS_PORT = process.env.TYPESENSE_PORT ? Number(process.env.TYPESENSE_PORT) : undefined;
-const TS_PROTOCOL = process.env.TYPESENSE_PROTOCOL; // http|https
+const TS_HOST = process.env.TYPESENSE_HOST?.trim();
+const TS_PROTOCOL = process.env.TYPESENSE_PROTOCOL?.trim(); // http|https
+const TS_PORT = (() => {
+    const raw = process.env.TYPESENSE_PORT;
+    if (raw && String(raw).trim() !== '') return Number(raw);
+    if (TS_PROTOCOL === 'https') return 443;
+    if (TS_PROTOCOL === 'http') return 80;
+    return undefined;
+})();
 const TS_API_KEY = process.env.TYPESENSE_SEARCH_ONLY_KEY || process.env.TYPESENSE_API_KEY;
 const TS_COLLECTION = process.env.TYPESENSE_COLLECTION;
 
 let tsClient = null;
 try {
-    if (TS_HOST && TS_PORT && TS_PROTOCOL && TS_API_KEY) {
+    if (TS_HOST && TS_PROTOCOL && TS_API_KEY && typeof TS_PORT === 'number' && !Number.isNaN(TS_PORT)) {
         tsClient = new Typesense.Client({
             nodes: [{ host: TS_HOST, port: TS_PORT, protocol: TS_PROTOCOL }],
             apiKey: TS_API_KEY,
