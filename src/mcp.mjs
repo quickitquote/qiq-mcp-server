@@ -84,9 +84,9 @@ const sanitize = (v) => {
     return unq.trim();
 };
 
-const TS_HOST = sanitize(process.env.TYPESENSE_HOST);
-const TS_PROTOCOL = sanitize(process.env.TYPESENSE_PROTOCOL); // http|https
-const TS_PORT = (() => {
+let TS_HOST = sanitize(process.env.TYPESENSE_HOST);
+let TS_PROTOCOL = sanitize(process.env.TYPESENSE_PROTOCOL); // http|https
+let TS_PORT = (() => {
     const raw = sanitize(process.env.TYPESENSE_PORT);
     if (raw && raw !== '') {
         const n = Number(raw);
@@ -97,23 +97,28 @@ const TS_PORT = (() => {
     return undefined;
 })();
 // Prefer search-only key, then general API key, then admin key; pick the first non-empty trimmed value
-const TS_API_KEY = [process.env.TYPESENSE_SEARCH_ONLY_KEY, process.env.TYPESENSE_API_KEY, process.env.TYPESENSE_ADMIN_API_KEY]
+let TS_API_KEY = [process.env.TYPESENSE_SEARCH_ONLY_KEY, process.env.TYPESENSE_API_KEY, process.env.TYPESENSE_ADMIN_API_KEY]
     .find((v) => typeof v === 'string' && sanitize(v)?.length > 0);
-const TS_API_KEY_TRIMMED = sanitize(TS_API_KEY);
-const TS_COLLECTION = sanitize(process.env.TYPESENSE_COLLECTION);
+let TS_API_KEY_TRIMMED = sanitize(TS_API_KEY);
+let TS_COLLECTION = sanitize(process.env.TYPESENSE_COLLECTION);
 
 let tsClient = null;
-try {
-    if (TS_HOST && TS_PROTOCOL && TS_API_KEY_TRIMMED && typeof TS_PORT === 'number' && !Number.isNaN(TS_PORT)) {
-        tsClient = new Typesense.Client({
-            nodes: [{ host: TS_HOST, port: TS_PORT, protocol: TS_PROTOCOL }],
-            apiKey: TS_API_KEY_TRIMMED,
-            connectionTimeoutSeconds: 5,
-        });
+function rebuildTypesenseClient() {
+    try {
+        if (TS_HOST && TS_PROTOCOL && TS_API_KEY_TRIMMED && typeof TS_PORT === 'number' && !Number.isNaN(TS_PORT)) {
+            tsClient = new Typesense.Client({
+                nodes: [{ host: TS_HOST, port: TS_PORT, protocol: TS_PROTOCOL }],
+                apiKey: TS_API_KEY_TRIMMED,
+                connectionTimeoutSeconds: 5,
+            });
+        } else {
+            tsClient = null;
+        }
+    } catch {
+        tsClient = null;
     }
-} catch {
-    tsClient = null;
 }
+rebuildTypesenseClient();
 
 const productSchema = {
     type: 'object',
@@ -266,6 +271,63 @@ registerTool('qiq_scoring', {
         });
         scored.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
         return { products: scored };
+    },
+});
+
+// Administrative tool to set Typesense config at runtime (no service restart required)
+registerTool('typesense_config_set', {
+    description: 'Set Typesense connection and query configuration at runtime.',
+    inputSchema: {
+        type: 'object',
+        properties: {
+            host: { type: 'string' },
+            protocol: { type: 'string' },
+            port: { type: 'number' },
+            apiKey: { type: 'string' },
+            collection: { type: 'string' },
+            query_by: { type: 'string' },
+            query_by_weights: { type: 'string' },
+        },
+        additionalProperties: false,
+    },
+    outputSchema: {
+        type: 'object',
+        properties: {
+            applied: { type: 'boolean' },
+            host: { type: 'string' },
+            protocol: { type: 'string' },
+            port: { type: 'number' },
+            collection: { type: 'string' },
+            query_by: { type: 'string' },
+            query_by_weights: { type: 'string' },
+        },
+        required: ['applied'],
+        additionalProperties: false,
+    },
+    call: async (args = {}) => {
+        try {
+            const { host, protocol, port, apiKey, collection, query_by, query_by_weights } = args;
+            if (host) TS_HOST = sanitize(host);
+            if (protocol) TS_PROTOCOL = sanitize(protocol);
+            if (typeof port === 'number' && Number.isFinite(port)) TS_PORT = port;
+            if (apiKey) TS_API_KEY_TRIMMED = sanitize(apiKey);
+            if (collection) TS_COLLECTION = sanitize(collection);
+            // Reset cached query_by if override provided
+            if (query_by) cachedQueryBy = sanitize(query_by);
+            if (query_by_weights) process.env.TYPESENSE_QUERY_BY_WEIGHTS = sanitize(query_by_weights);
+            rebuildTypesenseClient();
+            return {
+                applied: true,
+                host: TS_HOST || '',
+                protocol: TS_PROTOCOL || '',
+                port: typeof TS_PORT === 'number' ? TS_PORT : 0,
+                collection: TS_COLLECTION || '',
+                query_by: cachedQueryBy || sanitize(process.env.TYPESENSE_QUERY_BY) || '',
+                query_by_weights: sanitize(process.env.TYPESENSE_QUERY_BY_WEIGHTS) || '',
+            };
+        } catch {
+            return { applied: false };
+        }
     },
 });
 
