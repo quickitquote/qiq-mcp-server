@@ -154,6 +154,10 @@ registerTool('typesense_search', {
         try {
             // Determine query_by fields once
             if (!cachedQueryBy) {
+                const envQueryBy = process.env.TYPESENSE_QUERY_BY?.trim();
+                if (envQueryBy) {
+                    cachedQueryBy = envQueryBy;
+                }
                 try {
                     const schema = await tsClient.collections(TS_COLLECTION).retrieve();
                     const strFields = (schema?.fields || [])
