@@ -104,6 +104,8 @@ let TS_COLLECTION = sanitize(process.env.TYPESENSE_COLLECTION);
 
 let tsClient = null;
 function rebuildTypesenseClient() {
+    // Always null the old client first to force a fresh instance
+    tsClient = null;
     try {
         if (TS_HOST && TS_PROTOCOL && TS_API_KEY_TRIMMED && typeof TS_PORT === 'number' && !Number.isNaN(TS_PORT)) {
             console.log('[TS] Building client:', { host: TS_HOST, protocol: TS_PROTOCOL, port: TS_PORT, collection: TS_COLLECTION, keyLength: TS_API_KEY_TRIMMED?.length });
@@ -112,6 +114,7 @@ function rebuildTypesenseClient() {
                 apiKey: TS_API_KEY_TRIMMED,
                 connectionTimeoutSeconds: 5,
             });
+            console.log('[TS] Client rebuilt successfully');
         } else {
             console.log('[TS] Client not initialized:', { host: TS_HOST, protocol: TS_PROTOCOL, port: TS_PORT, keyLength: TS_API_KEY_TRIMMED?.length, collection: TS_COLLECTION });
             tsClient = null;
@@ -321,6 +324,7 @@ registerTool('typesense_config_set', {
     call: async (args = {}) => {
         try {
             const { host, protocol, port, apiKey, collection, query_by, query_by_weights } = args;
+            console.log('[TS_CONFIG_SET] Received:', { host, protocol, port, apiKeyLength: apiKey?.length, collection, query_by, query_by_weights });
             if (host) TS_HOST = sanitize(host);
             if (protocol) TS_PROTOCOL = sanitize(protocol);
             if (typeof port === 'number' && Number.isFinite(port)) TS_PORT = port;
@@ -329,7 +333,9 @@ registerTool('typesense_config_set', {
             // Reset cached query_by if override provided
             if (query_by) cachedQueryBy = sanitize(query_by);
             if (query_by_weights) process.env.TYPESENSE_QUERY_BY_WEIGHTS = sanitize(query_by_weights);
+            console.log('[TS_CONFIG_SET] About to rebuild client...');
             rebuildTypesenseClient();
+            console.log('[TS_CONFIG_SET] Rebuild complete. tsClient?', !!tsClient);
             return {
                 applied: true,
                 host: TS_HOST || '',
@@ -339,7 +345,8 @@ registerTool('typesense_config_set', {
                 query_by: cachedQueryBy || sanitize(process.env.TYPESENSE_QUERY_BY) || '',
                 query_by_weights: sanitize(process.env.TYPESENSE_QUERY_BY_WEIGHTS) || '',
             };
-        } catch {
+        } catch (e) {
+            console.error('[TS_CONFIG_SET] Error:', e);
             return { applied: false };
         }
     },
