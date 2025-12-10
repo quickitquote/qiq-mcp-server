@@ -106,15 +106,18 @@ let tsClient = null;
 function rebuildTypesenseClient() {
     try {
         if (TS_HOST && TS_PROTOCOL && TS_API_KEY_TRIMMED && typeof TS_PORT === 'number' && !Number.isNaN(TS_PORT)) {
+            console.log('[TS] Building client:', { host: TS_HOST, protocol: TS_PROTOCOL, port: TS_PORT, collection: TS_COLLECTION, keyLength: TS_API_KEY_TRIMMED?.length });
             tsClient = new Typesense.Client({
                 nodes: [{ host: TS_HOST, port: TS_PORT, protocol: TS_PROTOCOL }],
                 apiKey: TS_API_KEY_TRIMMED,
                 connectionTimeoutSeconds: 5,
             });
         } else {
+            console.log('[TS] Client not initialized:', { host: TS_HOST, protocol: TS_PROTOCOL, port: TS_PORT, keyLength: TS_API_KEY_TRIMMED?.length, collection: TS_COLLECTION });
             tsClient = null;
         }
-    } catch {
+    } catch (err) {
+        console.error('[TS] Build error:', err);
         tsClient = null;
     }
 }
