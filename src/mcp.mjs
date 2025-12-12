@@ -83,58 +83,6 @@ registerTool('ping', {
 });
 
 // Required tool: typesense_search (HTTP returns must be { products: [...] } with no wrappers)
-import dotenv from 'dotenv';
-import Typesense from 'typesense';
-
-dotenv.config();
-
-let typesenseClient = null;
-let typesenseConfig = {
-    host: process.env.TYPESENSE_HOST,
-    protocol: process.env.TYPESENSE_PROTOCOL || 'https',
-    port: parseInt(process.env.TYPESENSE_PORT || (process.env.TYPESENSE_PROTOCOL === 'http' ? '80' : '443'), 10),
-    apiKey: process.env.TYPESENSE_SEARCH_ONLY_KEY || process.env.TYPESENSE_API_KEY || process.env.TYPESENSE_ADMIN_API_KEY,
-    collection: process.env.TYPESENSE_COLLECTION || 'quickitquote_products',
-    query_by: process.env.TYPESENSE_QUERY_BY || 'name,description,brand,category',
-};
-
-function buildTypesenseClient() {
-    const { host, protocol, port, apiKey } = typesenseConfig;
-    if (!host || !apiKey) {
-        typesenseClient = null;
-        return null;
-    }
-    typesenseClient = new Typesense.Client({
-        nodes: [{ host, port, protocol }],
-        apiKey,
-        connectionTimeoutSeconds: 5,
-    });
-    return typesenseClient;
-}
-
-buildTypesenseClient();
-
-function normalizeAvailability(n) {
-    const v = Number(n) || 0;
-    return v; // Keep number as required; downstream maps to semantics
-}
-
-function mapProduct(doc) {
-    const oid = String(doc.objectID || doc.object_id || doc.mpn_normalized || doc.vendor_mpn || doc.sku || '');
-    const name = String(doc.display_name || doc.name || oid);
-    const brandRaw = String(doc.brand || doc.vendor || '').trim();
-    const brand = brandRaw.replace(/\s+Lab$/i, '').trim() || brandRaw;
-    const item_type = String(doc.item_type || doc.type || '').toLowerCase();
-    const category = String(doc.category || doc.subcategory || '').toLowerCase();
-    const price = Number(doc.price || doc.unit_price || 0);
-    const list_price = doc.list_price != null ? Number(doc.list_price) : 0;
-    const availability = normalizeAvailability(doc.availability);
-    const image = String(doc.image || doc.image_url || `https://cdn.quickitquote.com/catalog/${encodeURIComponent(oid)}.jpg`);
-    const spec_sheet = String(doc.spec_sheet || doc.spec || `https://cdn.quickitquote.com/specs/${encodeURIComponent(oid)}.pdf`);
-    const url = `https://quickitquote.com/catalog/${encodeURIComponent(oid)}`;
-    return { objectID: oid, name, brand, item_type, category, price, list_price, availability, image, spec_sheet, url };
-}
-
 registerTool('typesense_search', {
     description: 'Return products by objectIDs or keywords. If objectIDs are provided, returns those products in canonical QIQ shape.',
     inputSchema: {
@@ -176,60 +124,111 @@ registerTool('typesense_search', {
         additionalProperties: false,
     },
     call: async ({ objectID, objectIDs, keywords, category } = {}) => {
+        // Lazy import to avoid bundling when unused in some environments
+        const { default: Typesense } = await import('typesense');
+        const dotenvModule = await import('dotenv');
+        dotenvModule.default.config();
+
+        const host = process.env.TYPESENSE_HOST;
+        const protocol = (process.env.TYPESENSE_PROTOCOL || 'https').toLowerCase();
+        const port = parseInt(process.env.TYPESENSE_PORT || (protocol === 'https' ? '443' : '80'), 10);
+        const apiKey = [
+            process.env.TYPESENSE_SEARCH_ONLY_KEY,
+            process.env.TYPESENSE_API_KEY,
+            process.env.TYPESENSE_ADMIN_API_KEY,
+        ].find((v) => typeof v === 'string' && v.trim().length > 0);
+        const collection = process.env.TYPESENSE_COLLECTION || 'quickitquote_products';
+        const queryBy = (process.env.TYPESENSE_QUERY_BY || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+        const client = (host && apiKey)
+            ? new Typesense.Client({ nodes: [{ host, port, protocol }], apiKey, connectionTimeoutSeconds: 10 })
+            : null;
+
+        function toAvailability(n) {
+            const v = Number.isFinite(n) ? n : 0;
+            return v; // keep numeric per schema; mapping semantics handled downstream
+        }
+
+        function mapRecord(rec, fallbackCategory) {
+            const oid = String(rec?.objectID || rec?.id || rec?.mpn || rec?.manufacturer_part_number || rec?.sku || '');
+            const name = String(rec?.name || rec?.title || oid);
+            const brand = String((rec?.brand || rec?.vendor || rec?.manufacturer || '').toString());
+            const item_type = String(rec?.item_type || rec?.type || rec?.product_type || '');
+            const categoryVal = String(rec?.category || rec?.categories || fallbackCategory || '');
+            const priceNum = Number(rec?.price ?? rec?.sale_price ?? rec?.unit_price ?? 0) || 0;
+            const listPriceNum = Number(rec?.list_price ?? rec?.msrp ?? rec?.original_price ?? 0) || 0;
+            const availabilityNum = toAvailability(Number(rec?.availability ?? rec?.stock ?? rec?.qty ?? 0));
+            const imageUrl = String(rec?.image || rec?.image_url || rec?.thumbnail || `https://cdn.quickitquote.com/catalog/${encodeURIComponent(oid)}.jpg`);
+            const specUrl = String(rec?.spec_sheet || rec?.spec_url || `https://cdn.quickitquote.com/specs/${encodeURIComponent(oid)}.pdf`);
+            const url = `https://quickitquote.com/catalog/${encodeURIComponent(oid)}`;
+            return {
+                objectID: oid,
+                name,
+                brand,
+                item_type,
+                category: categoryVal,
+                price: priceNum,
+                list_price: listPriceNum,
+                availability: availabilityNum,
+                image: imageUrl,
+                spec_sheet: specUrl,
+                url,
+            };
+        }
+
         try {
-            const collectIds = [];
-            if (Array.isArray(objectIDs)) collectIds.push(...objectIDs);
-            if (objectID) collectIds.push(objectID);
-            const ids = Array.from(new Set(collectIds.filter(Boolean).map((v) => String(v))));
+            const ids = Array.from(new Set([
+                ...(Array.isArray(objectIDs) ? objectIDs : []),
+                ...(objectID ? [objectID] : []),
+            ].filter(Boolean).map((v) => String(v))));
 
-            if (ids.length > 0) {
-                // Prefer direct document retrieve per objectID
-                const client = typesenseClient || buildTypesenseClient();
-                const products = [];
-                if (client && typesenseConfig.collection) {
-                    const coll = client.collections(typesenseConfig.collection).documents();
-                    for (const oid of ids) {
-                        try {
-                            const doc = await coll.retrieve(oid);
-                            products.push(mapProduct(doc || { objectID: oid }));
-                        } catch (e) {
-                            // Not found—emit minimal placeholder
-                            products.push(mapProduct({ objectID: oid, name: oid }));
-                        }
-                    }
-                    return { products };
-                } else {
-                    // No Typesense config—fallback placeholders
-                    const fallback = ids.map((oid) => mapProduct({ objectID: oid, name: oid, category }));
-                    return { products: fallback };
-                }
-            }
-
-            // Simple keywords fallback returns empty set for now
-            if (typeof keywords === 'string' && keywords.trim().length > 0) {
-                const client = typesenseClient || buildTypesenseClient();
-                if (client && typesenseConfig.collection) {
+            if (client && ids.length > 0) {
+                // Retrieve by filter. Try objectID field first, then id
+                const filterValue = ids.map((id) => `"${id.replace(/"/g, '\"')}"`).join(',');
+                const filterByCandidates = [
+                    `objectID:=[${filterValue}]`,
+                    `id:=[${filterValue}]`,
+                    `mpn:=[${filterValue}]`,
+                    `manufacturer_part_number:=[${filterValue}]`,
+                ];
+                let hits = [];
+                for (const filterBy of filterByCandidates) {
                     try {
-                        const searchParams = {
-                            q: keywords.trim(),
-                            query_by: typesenseConfig.query_by,
-                            per_page: 10,
-                        };
-                        const resp = await client.collections(typesenseConfig.collection).documents().search(searchParams);
-                        const hits = Array.isArray(resp.hits) ? resp.hits : [];
-                        const products = hits.map((h) => mapProduct(h.document || {}));
-                        return { products };
+                        const res = await client.collections(collection).documents().search({
+                            q: ids[0], // q required; we match via filter_by
+                            query_by: (queryBy.length > 0 ? queryBy.join(',') : 'name,brand,category'),
+                            per_page: ids.length,
+                            filter_by: filterBy,
+                        });
+                        hits = Array.isArray(res?.hits) ? res.hits : [];
+                        if (hits.length > 0) break;
                     } catch (e) {
-                        console.error('[typesense_search] search error:', e?.message || e);
-                        return { products: [] };
+                        // try next candidate
+                        continue;
                     }
                 }
-                return { products: [] };
+                const products = ids.map((oid) => {
+                    const hit = hits.find((h) => String(h?.document?.objectID ?? h?.document?.id ?? '') === String(oid));
+                    if (hit && hit.document) return mapRecord(hit.document, undefined);
+                    return mapRecord({ objectID: oid }, category);
+                });
+                return { products };
             }
 
+            if (client && typeof keywords === 'string' && keywords.trim().length > 0) {
+                const res = await client.collections(collection).documents().search({
+                    q: keywords.trim(),
+                    query_by: (queryBy.length > 0 ? queryBy.join(',') : 'name,brand,category'),
+                    per_page: 20,
+                });
+                const products = (Array.isArray(res?.hits) ? res.hits : []).map((h) => mapRecord(h.document, category));
+                return { products };
+            }
+
+            // No client or no inputs → empty JSON shape
             return { products: [] };
         } catch (e) {
-            console.error('[typesense_search] error:', e);
+            console.error('[typesense_search] error:', e?.message || e);
             return { products: [] };
         }
     },
