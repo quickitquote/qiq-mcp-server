@@ -76,16 +76,16 @@ export function handleJsonRpc(input) {
 
 // --- Built-in tools: Typesense search and QIQ scoring ---
 // Environment-driven configuration so the server can run without hardcoding
-    // Return a CallToolResult per MCP: { content: [ { type: 'json', json: { products: [...] } } ] }
-    const raw = sanitize(process.env.TYPESENSE_PORT);
-    if (raw && raw !== '') {
-        const n = Number(raw);
-        if (!Number.isNaN(n)) return n;
-    }
-    if (TS_PROTOCOL === 'https') return 443;
-    if (TS_PROTOCOL === 'http') return 80;
-    return undefined;
-})();
+// Return a CallToolResult per MCP: { content: [ { type: 'json', json: { products: [...] } } ] }
+const raw = sanitize(process.env.TYPESENSE_PORT);
+if (raw && raw !== '') {
+    const n = Number(raw);
+    if (!Number.isNaN(n)) return n;
+}
+if (TS_PROTOCOL === 'https') return 443;
+if (TS_PROTOCOL === 'http') return 80;
+return undefined;
+}) ();
 // Prefer search-only key, then general API key, then admin key; pick the first non-empty trimmed value
 let TS_API_KEY = [process.env.TYPESENSE_SEARCH_ONLY_KEY, process.env.TYPESENSE_API_KEY, process.env.TYPESENSE_ADMIN_API_KEY]
     .find((v) => typeof v === 'string' && sanitize(v)?.length > 0);
@@ -123,13 +123,13 @@ const productSchema = {
         name: { type: 'string' },
         brand: { type: 'string' },
         price: { type: 'number' },
-    call: async ({ objectID, objectIDs, keywords, category } = {}) => {
-        // If Typesense is not configured, return empty list (no mock fallbacks)
-    required: ['sku', 'name', 'brand', 'price', 'quantity'],
+        call: async ({ objectID, objectIDs, keywords, category } = {}) => {
+            // If Typesense is not configured, return empty list (no mock fallbacks)
+            required: ['sku', 'name', 'brand', 'price', 'quantity'],
         if (!tsClient || !TS_COLLECTION) {
-            console.log('[TS_SEARCH] Client or collection missing, returning empty products');
-            return { content: [{ type: 'json', json: { products: [] } }] };
-        }
+                console.log('[TS_SEARCH] Client or collection missing, returning empty products');
+                return { content: [{ type: 'json', json: { products: [] } }] };
+            }
             objectID: { type: 'string' },
             objectIDs: { type: 'array', items: { type: 'string' } },
             keywords: { type: 'string' },
@@ -200,14 +200,8 @@ const productSchema = {
 >>>>>>> acf3d55 (fix: typesense_search schema and HTTP MCP server)
         console.log('[TS_SEARCH] tsClient?', !!tsClient, 'TS_COLLECTION?', TS_COLLECTION, 'TS_API_KEY_TRIMMED length?', TS_API_KEY_TRIMMED?.length);
         if (!tsClient || !TS_COLLECTION) {
-            console.log('[TS_SEARCH] Returning MOCK (client or collection missing)');
-            return {
-                products: [
-                    { sku: 'MOCK-001', name: `${category} basic - ${keywords}`, brand: 'Generic', price: 10, quantity: qty },
-                    { sku: 'MOCK-002', name: `${category} standard - ${keywords}`, brand: 'Generic', price: 20, quantity: qty },
-                    { sku: 'MOCK-003', name: `${category} pro - ${keywords}`, brand: 'Generic', price: 30, quantity: qty },
-                ],
-            };
+            console.log('[TS_SEARCH] Client or collection missing, returning empty products');
+            return { products: [] };
         }
 
         const coerceNum = (v) => {
@@ -309,10 +303,10 @@ const productSchema = {
                 }
             }
 
-            return { content: [{ type: 'json', json: { products: results } }] };
+            return { products: results };
         } catch (outerErr) {
             console.log('[TS_SEARCH] Outer catch:', outerErr?.message || outerErr);
-            return { content: [{ type: 'json', json: { products: [] } }] };
+            return { products: [] };
         }
     },
 });
