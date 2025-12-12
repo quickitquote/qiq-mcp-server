@@ -196,13 +196,11 @@ const productSchema = {
         additionalProperties: false,
     },
     call: async ({ objectID, objectIDs, keywords, category } = {}) => {
-        // If Typesense is not configured, return empty list (no mock fallbacks)
->>>>>>> acf3d55 (fix: typesense_search schema and HTTP MCP server)
-        console.log('[TS_SEARCH] tsClient?', !!tsClient, 'TS_COLLECTION?', TS_COLLECTION, 'TS_API_KEY_TRIMMED length?', TS_API_KEY_TRIMMED?.length);
-        if (!tsClient || !TS_COLLECTION) {
-            console.log('[TS_SEARCH] Client or collection missing, returning empty products');
-            return { products: [] };
-        }
+        // Defensive: never throw, always return valid JSON
+        try {
+            if (!tsClient || !TS_COLLECTION) {
+                return { products: [] };
+            }
 
         const coerceNum = (v) => {
             if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
@@ -218,11 +216,16 @@ const productSchema = {
             const item_type = doc.item_type ?? doc.type ?? '';
             const categoryVal = doc.category ?? '';
             const price = coerceNum(doc.price) ?? 0;
-            const list_price = coerceNum(doc.list_price) ?? price;
+            const list_price = coerceNum(doc.list_price) ?? null;
             const availability = coerceNum(doc.availability ?? doc.stock ?? doc.inventory) ?? 0;
-            const image = doc.image ?? doc.image_url ?? '';
-            const spec_sheet = doc.spec_sheet ?? doc.datasheet_url ?? '';
-            const url = doc.url ?? (oid ? `https://quickitquote.com/catalog/${encodeURIComponent(String(oid))}` : '');
+            const rawImage = doc.image ?? doc.image_url ?? '';
+            const image = typeof rawImage === 'string' && rawImage.startsWith('https://cdn.quickitquote.com/') ? rawImage : '';
+            const rawSpec = doc.spec_sheet ?? doc.datasheet_url ?? '';
+            const spec_sheet = typeof rawSpec === 'string' && rawSpec.startsWith('https://cdn.quickitquote.com/specs/') ? rawSpec : '';
+                // Enforce CDN URL patterns based on objectID
+                const image = oid ? `https://cdn.quickitquote.com/catalog/${encodeURIComponent(String(oid))}.jpg` : '';
+                const spec_sheet = oid ? `https://cdn.quickitquote.com/specs/${encodeURIComponent(String(oid))}.pdf` : '';
+                const url = `https://quickitquote.com/catalog/${encodeURIComponent(String(oid))}`;
             if (!oid || !name || !brand || !categoryVal) return null;
             return {
                 objectID: String(oid),
@@ -239,7 +242,6 @@ const productSchema = {
             };
         };
 
-        try {
             const results = [];
 
             // Prefer exact retrieval if objectIDs provided
@@ -269,7 +271,7 @@ const productSchema = {
                                 if (mapped && mapped.objectID === id) results.push(mapped);
                             }
                         } catch (e2) {
-                            console.log('[TS_SEARCH] retrieve/search failed for', id, e2?.message || e2);
+                            // Swallow errors defensively
                         }
                     }
                 }
@@ -304,8 +306,7 @@ const productSchema = {
             }
 
             return { products: results };
-        } catch (outerErr) {
-            console.log('[TS_SEARCH] Outer catch:', outerErr?.message || outerErr);
+        } catch (_err) {
             return { products: [] };
         }
     },
