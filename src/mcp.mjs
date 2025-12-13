@@ -204,9 +204,9 @@ registerTool('typesense_search', {
                 ...(Array.isArray(objectIDs) ? objectIDs : []),
                 ...(objectID ? [objectID] : []),
             ]
-            .filter(Boolean)
-            .map((v) => String(v).trim())
-            .map((v) => v.toLowerCase())));
+                .filter(Boolean)
+                .map((v) => String(v).trim())
+                .map((v) => v.toLowerCase())));
 
             if (client && ids.length > 0) {
                 // Retrieve by filter. Try objectID field first, then id
