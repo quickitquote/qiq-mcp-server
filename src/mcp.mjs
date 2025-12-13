@@ -171,16 +171,17 @@ registerTool('typesense_search', {
         }
 
         function mapRecord(rec) {
-            const oid = String(rec?.objectID || rec?.id || rec?.mpn || rec?.manufacturer_part_number || rec?.vendor_mpn || rec?.sku || '');
-            const name = String(rec?.name || rec?.title || '');
-            const brand = String(rec?.brand || rec?.vendor || rec?.manufacturer || '');
-            const item_type = String(rec?.item_type || rec?.type || rec?.product_type || '');
-            const categoryVal = String(rec?.category || rec?.categories || '');
-            const priceNum = Number.isFinite(Number(rec?.price ?? rec?.sale_price ?? rec?.unit_price)) ? Number(rec?.price ?? rec?.sale_price ?? rec?.unit_price) : 0;
-            const listPriceNum = Number.isFinite(Number(rec?.list_price ?? rec?.msrp ?? rec?.original_price)) ? Number(rec?.list_price ?? rec?.msrp ?? rec?.original_price) : 0;
-            const availabilityNum = toAvailability(Number(rec?.availability ?? rec?.stock ?? rec?.qty));
-            const imageUrl = String(rec?.image || rec?.image_url || rec?.thumbnail || '');
-            const specUrl = String(rec?.spec_sheet || rec?.spec_url || '');
+            // Read object_id from Typesense, emit objectID in output
+            const oid = String(rec?.objectID || rec?.object_id || '');
+            const name = String(rec?.name || '');
+            const brand = String(rec?.brand || '');
+            const item_type = String(rec?.item_type || '');
+            const categoryVal = String(rec?.category || '');
+            const priceNum = Number.isFinite(Number(rec?.price)) ? Number(rec?.price) : 0;
+            const listPriceNum = Number.isFinite(Number(rec?.list_price)) ? Number(rec?.list_price) : 0;
+            const availabilityNum = toAvailability(Number(rec?.availability));
+            const imageUrl = String(rec?.image || '');
+            const specUrl = String(rec?.spec_sheet || '');
             const url = `https://quickitquote.com/catalog/${encodeURIComponent(oid)}`;
             return {
                 objectID: oid,
@@ -208,6 +209,7 @@ registerTool('typesense_search', {
                 const filterValue = ids.map((id) => `"${id.replace(/"/g, '\"')}"`).join(',');
                 const filterByCandidates = [
                     `objectID:=[${filterValue}]`,
+                    `object_id:=[${filterValue}]`,
                     `id:=[${filterValue}]`,
                     `mpn:=[${filterValue}]`,
                     `manufacturer_part_number:=[${filterValue}]`,
@@ -239,6 +241,7 @@ registerTool('typesense_search', {
                         const d = h?.document || {};
                         return [
                             d.objectID,
+                            d.object_id,
                             d.id,
                             d.mpn,
                             d.manufacturer_part_number,
