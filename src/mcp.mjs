@@ -51,15 +51,6 @@ export function handleJsonRpc(input) {
             case 'tools/call': {
                 const name = params?.name; const args = params?.arguments;
                 const tool = name && getTool(name);
-                const { objectID, objectIDs, keywords, category } = params || {}
-                // Accept both camelCase and lowercase keys from upstream nodes
-                const objectID = (params?.objectID ?? params?.objectid ?? params?.ObjectID ?? params?.ObjectId) || undefined
-                let objectIDs = (params?.objectIDs ?? params?.objectIds ?? params?.objectids ?? params?.ObjectIDs) || undefined
-
-                // Normalize a single id into array for unified handling
-                if (!objectIDs && objectID) {
-                    objectIDs = [objectID]
-                }
                 if (!tool) return err(-32601, `Method not found: tool ${name}`);
                 return Promise.resolve(tool.call(args || {}))
                     .then((result) => ok(result))
@@ -216,7 +207,6 @@ registerTool('typesense_search', {
                 .filter(Boolean)
                 .map((v) => String(v).trim())
                 .map((v) => v.toLowerCase())));
-            const ids = (objectIDs || []).map(id => String(id).toLowerCase())
 
             if (client && ids.length > 0) {
                 // Retrieve by filter. Try objectID field first, then id
@@ -244,27 +234,7 @@ registerTool('typesense_search', {
                         continue;
                     }
                 }
-                // For any id not found in the initial batch, attempt a targeted fallback search
-                async function fallbackLookup(oid) {
-                    const fields = [
-                        'objectID', 'object_id', 'id', 'mpn', 'manufacturer_part_number', 'vendor_mpn', 'sku', 'mpn_normalized'
-                    ];
-                    for (const f of fields) {
-                        try {
-                            const res = await client.collections(collection).documents().search({
-                                q: '*',
-                                query_by: (queryBy.length > 0 ? queryBy.join(',') : 'name,brand,category'),
-                                per_page: 1,
-                                filter_by: `${f}:=${JSON.stringify(oid)}`,
-                            });
-                            const doc = Array.isArray(res?.hits) && res.hits[0]?.document;
-                            if (doc) return mapRecord(doc);
-                        } catch { /* try next field */ }
-                    }
-                    return mapRecord({ objectID: oid });
-                }
-
-                const products = await Promise.all(ids.map(async (oid) => {
+                const products = ids.map((oid) => {
                     const hit = hits.find((h) => {
                         const d = h?.document || {};
                         return [
@@ -275,13 +245,11 @@ registerTool('typesense_search', {
                             (d.manufacturer_part_number ? String(d.manufacturer_part_number).toLowerCase() : ''),
                             (d.vendor_mpn ? String(d.vendor_mpn).toLowerCase() : ''),
                             (d.sku ? String(d.sku).toLowerCase() : ''),
-                            (d.mpn_normalized ? String(d.mpn_normalized).toLowerCase() : ''),
                         ].some((v) => v === String(oid));
                     });
                     if (hit && hit.document) return mapRecord(hit.document);
-                    // Fallback targeted search
-                    return fallbackLookup(oid);
-                }));
+                    return mapRecord({ objectID: oid });
+                });
                 return { products };
             }
 
