@@ -218,7 +218,7 @@ registerTool('typesense_search', {
                 for (const filterBy of filterByCandidates) {
                     try {
                         const res = await client.collections(collection).documents().search({
-                            q: ids[0], // q required; we match via filter_by
+                            q: '*', // wildcard query; we match via filter_by to fetch exact docs
                             query_by: (queryBy.length > 0 ? queryBy.join(',') : 'name,brand,category'),
                             per_page: ids.length,
                             filter_by: filterBy,
@@ -259,7 +259,7 @@ registerTool('typesense_search', {
 
             if (client && typeof keywords === 'string' && keywords.trim().length > 0) {
                 const res = await client.collections(collection).documents().search({
-                    q: keywords.trim(),
+                    q: keywords.trim().length > 0 ? keywords.trim() : '*',
                     query_by: (queryBy.length > 0 ? queryBy.join(',') : 'name,brand,category'),
                     per_page: 20,
                 });
