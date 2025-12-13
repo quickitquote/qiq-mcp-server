@@ -28,8 +28,7 @@ app.get('/mcp', authGuard, (_req, res) => {
     res.status(426).json({ error: 'Upgrade Required' });
 });
 
-// SSE endpoint – send initial initialize message and keep the stream alive
-app.get('/mcp/sse', authGuard, async (req, res) => {
+async function streamSse(req, res) {
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -44,7 +43,10 @@ app.get('/mcp/sse', authGuard, async (req, res) => {
         res.write('data: "keep-alive"\n\n');
     }, 25000);
     req.on('close', () => clearInterval(interval));
-});
+}
+
+// SSE endpoint – send initial initialize message and keep the stream alive
+app.get('/mcp/sse', authGuard, streamSse);
 
 // CORS preflight for /mcp/sse POST
 app.options('/mcp/sse', (req, res) => {
@@ -69,16 +71,13 @@ app.post('/mcp/sse', authGuard, async (req, res) => {
 // CORS preflight for /mcp/http
 app.options('/mcp/http', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Access-Token');
     res.status(204).end();
 });
 
-// GET handler for /mcp/http → 405 JSON (no HTML)
-app.get('/mcp/http', authGuard, (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.status(405).json({ error: 'Method not allowed. Use POST.' });
-});
+// GET handler for /mcp/http → SSE alias for compatibility (Agent Builder sometimes expects GET on the same URL)
+app.get('/mcp/http', authGuard, streamSse);
 
 // POST /mcp/http → JSON-RPC over HTTP with CORS
 app.post('/mcp/http', authGuard, async (req, res) => {

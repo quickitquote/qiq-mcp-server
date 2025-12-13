@@ -67,6 +67,7 @@ Server listens on `http://0.0.0.0:<PORT>` (default 8080).
 
 Endpoints:
 - `GET /mcp/sse` → SSE stream (sends `initialize` and keep‑alive pings)
+- `GET /mcp/http` → SSE alias for tools that expect the stream on the same URL as POST
 - `POST /mcp/sse` → JSON‑RPC requests (e.g., `tools/list`, `tools/call`)
 - `GET /mcp/info` → health/tools (requires token if configured)
 
