@@ -237,7 +237,7 @@ registerTool('typesense_search', {
                 // For any id not found in the initial batch, attempt a targeted fallback search
                 async function fallbackLookup(oid) {
                     const fields = [
-                        'objectID','object_id','id','mpn','manufacturer_part_number','vendor_mpn','sku','mpn_normalized'
+                        'objectID', 'object_id', 'id', 'mpn', 'manufacturer_part_number', 'vendor_mpn', 'sku', 'mpn_normalized'
                     ];
                     for (const f of fields) {
                         try {
