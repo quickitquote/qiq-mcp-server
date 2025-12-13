@@ -7,6 +7,17 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
+// Basic CORS for MCP endpoints
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+    next();
+});
+
 const PORT = parseInt(process.env.HTTP_PORT || process.env.PORT || process.env.MCP_PORT || '3001', 10);
 const HOST = process.env.MCP_HOST || '0.0.0.0';
 
@@ -67,6 +78,18 @@ app.get('/mcp/sse', (req, res) => {
     // Send a ping to confirm stream is open
     res.write(`event: ping\n`);
     res.write(`data: {"ok":true}\n\n`);
+
+    // Optionally emit tools/list immediately so clients see available tools without posting
+    (async () => {
+        try {
+            const listResponse = await Promise.resolve(handleJsonRpc({ jsonrpc: '2.0', id: Date.now(), method: 'tools/list' }));
+            const data = JSON.stringify(listResponse);
+            res.write(`event: message\n`);
+            res.write(`data: ${data}\n\n`);
+        } catch (e) {
+            // ignore
+        }
+    })();
 
     req.on('close', () => {
         sseClients.delete(client);
