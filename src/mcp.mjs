@@ -50,16 +50,16 @@ export function handleJsonRpc(input) {
                 return ok({ tools: getTools() });
             case 'tools/call': {
                 const name = params?.name; const args = params?.arguments;
-                    const tool = name && getTool(name);
-                    const { objectID, objectIDs, keywords, category } = params || {}
-                    // Accept both camelCase and lowercase keys from upstream nodes
-                    const objectID = (params?.objectID ?? params?.objectid ?? params?.ObjectID ?? params?.ObjectId) || undefined
-                    let objectIDs = (params?.objectIDs ?? params?.objectIds ?? params?.objectids ?? params?.ObjectIDs) || undefined
+                const tool = name && getTool(name);
+                const { objectID, objectIDs, keywords, category } = params || {}
+                // Accept both camelCase and lowercase keys from upstream nodes
+                const objectID = (params?.objectID ?? params?.objectid ?? params?.ObjectID ?? params?.ObjectId) || undefined
+                let objectIDs = (params?.objectIDs ?? params?.objectIds ?? params?.objectids ?? params?.ObjectIDs) || undefined
 
-                    // Normalize a single id into array for unified handling
-                    if (!objectIDs && objectID) {
-                        objectIDs = [objectID]
-                    }
+                // Normalize a single id into array for unified handling
+                if (!objectIDs && objectID) {
+                    objectIDs = [objectID]
+                }
                 if (!tool) return err(-32601, `Method not found: tool ${name}`);
                 return Promise.resolve(tool.call(args || {}))
                     .then((result) => ok(result))
@@ -210,13 +210,13 @@ registerTool('typesense_search', {
         try {
             // Normalize identifiers: ensure strings and lowercase to avoid case mismatches
             const ids = Array.from(new Set([
-                    ...(Array.isArray(objectIDs) ? objectIDs : []),
-                    ...(objectID ? [objectID] : []),
+                ...(Array.isArray(objectIDs) ? objectIDs : []),
+                ...(objectID ? [objectID] : []),
             ]
                 .filter(Boolean)
                 .map((v) => String(v).trim())
                 .map((v) => v.toLowerCase())));
-                const ids = (objectIDs || []).map(id => String(id).toLowerCase())
+            const ids = (objectIDs || []).map(id => String(id).toLowerCase())
 
             if (client && ids.length > 0) {
                 // Retrieve by filter. Try objectID field first, then id
