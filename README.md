@@ -75,9 +75,49 @@ Auth: set `MCP_TOKEN` then pass it via `Authorization: Bearer <token>`.
 
 Environment variables: see `.env.example`.
 
+### Quick connect in OpenAI Agent Builder
+Use these values in the "Connect to MCP Server" dialog (screenshot in prompt):
+
+- **URL**: `https://<your-domain-or-ip>/mcp/sse` (or `https://<your-domain-or-ip>/mcp/http` if the client expects GET+POST on the same path).
+- **Label**: any short name, e.g., `qiq_mcp_server`.
+- **Description (optional)**: e.g., `QIQ MCP Server`.
+- **Authentication → Access token / API key**: the value of `MCP_TOKEN` from your `.env`.
+
+If you did not set `MCP_TOKEN`, leave Authentication blank. Keep the same URL for both listing tools and streaming.
+
+### VPS setup steps
+On your VPS (e.g., the `root@109.199.105.196` server you mentioned):
+
+1. **Install dependencies** (Node 20+):
+   ```bash
+   apt update && apt install -y curl git
+   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+   apt install -y nodejs
+   ```
+2. **Fetch the code** (or pull latest):
+   ```bash
+   cd /opt
+   git clone https://github.com/<your-org>/qiq-mcp-server.git
+   cd qiq-mcp-server
+   npm install --production
+   ```
+3. **Create `/opt/qiq-mcp-server/.env`** (copy from `.env.example`):
+   ```bash
+   cp .env.example .env
+   # then edit .env to set MCP_TOKEN and any Typesense values
+   ```
+4. **Start the server** (foreground for testing):
+   ```bash
+   PORT=8080 node run.mjs
+   ```
+   For background service, run via a process manager (e.g., `pm2 start run.mjs --name qiq-mcp`).
+5. **Open firewall/Cloudflare** so `https://<your-domain-or-ip>/mcp/sse` (and `/mcp/http`) are reachable.
+
+After the server is running, use the Agent Builder form above with your public URL and `MCP_TOKEN` to connect.
+
 ### Test endpoints
 - List tools
-	- `POST /mcp/sse` with body `{ "jsonrpc":"2.0","id":1,"method":"tools/list","params":{} }`
+        - `POST /mcp/sse` with body `{ "jsonrpc":"2.0","id":1,"method":"tools/list","params":{} }`
 - Call Typesense search
 	- `POST /mcp/sse` with body
 		`{ "jsonrpc":"2.0","id":2,"method":"tools/call","params":{ "name":"typesense_search", "arguments": { "category":"edr","keywords":"license", "quantity":100 } } }`
