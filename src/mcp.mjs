@@ -149,17 +149,17 @@ registerTool('typesense_search', {
             return v; // keep numeric per schema; mapping semantics handled downstream
         }
 
-        function mapRecord(rec, fallbackCategory) {
-            const oid = String(rec?.objectID || rec?.id || rec?.mpn || rec?.manufacturer_part_number || rec?.sku || '');
-            const name = String(rec?.name || rec?.title || oid);
-            const brand = String((rec?.brand || rec?.vendor || rec?.manufacturer || '').toString());
-            const item_type = String(rec?.item_type || rec?.type || rec?.product_type || '');
-            const categoryVal = String(rec?.category || rec?.categories || fallbackCategory || '');
-            const priceNum = Number(rec?.price ?? rec?.sale_price ?? rec?.unit_price ?? 0) || 0;
-            const listPriceNum = Number(rec?.list_price ?? rec?.msrp ?? rec?.original_price ?? 0) || 0;
-            const availabilityNum = toAvailability(Number(rec?.availability ?? rec?.stock ?? rec?.qty ?? 0));
-            const imageUrl = String(rec?.image || rec?.image_url || rec?.thumbnail || `https://cdn.quickitquote.com/catalog/${encodeURIComponent(oid)}.jpg`);
-            const specUrl = String(rec?.spec_sheet || rec?.spec_url || `https://cdn.quickitquote.com/specs/${encodeURIComponent(oid)}.pdf`);
+        function mapRecord(rec) {
+            const oid = String(rec?.objectID || '');
+            const name = String(rec?.name || '');
+            const brand = String(rec?.brand || '');
+            const item_type = String(rec?.item_type || '');
+            const categoryVal = String(rec?.category || '');
+            const priceNum = Number.isFinite(Number(rec?.price)) ? Number(rec?.price) : 0;
+            const listPriceNum = Number.isFinite(Number(rec?.list_price)) ? Number(rec?.list_price) : 0;
+            const availabilityNum = toAvailability(Number(rec?.availability));
+            const imageUrl = String(rec?.image || '');
+            const specUrl = String(rec?.spec_sheet || '');
             const url = `https://quickitquote.com/catalog/${encodeURIComponent(oid)}`;
             return {
                 objectID: oid,
@@ -208,9 +208,9 @@ registerTool('typesense_search', {
                     }
                 }
                 const products = ids.map((oid) => {
-                    const hit = hits.find((h) => String(h?.document?.objectID ?? h?.document?.id ?? '') === String(oid));
-                    if (hit && hit.document) return mapRecord(hit.document, undefined);
-                    return mapRecord({ objectID: oid }, category);
+                    const hit = hits.find((h) => String(h?.document?.objectID ?? '') === String(oid));
+                    if (hit && hit.document) return mapRecord(hit.document);
+                    return mapRecord({ objectID: oid });
                 });
                 return { products };
             }
@@ -221,7 +221,7 @@ registerTool('typesense_search', {
                     query_by: (queryBy.length > 0 ? queryBy.join(',') : 'name,brand,category'),
                     per_page: 20,
                 });
-                const products = (Array.isArray(res?.hits) ? res.hits : []).map((h) => mapRecord(h.document, category));
+                const products = (Array.isArray(res?.hits) ? res.hits : []).map((h) => mapRecord(h.document));
                 return { products };
             }
 
