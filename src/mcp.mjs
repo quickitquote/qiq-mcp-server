@@ -228,7 +228,9 @@ registerTool('typesense_search', {
                             try {
                                 const first = hits[0]?.document || {};
                                 console.log('[typesense_search] debug first doc keys:', Object.keys(first));
-                            } catch { }
+                                const sample = JSON.stringify(first);
+                                console.log('[typesense_search] debug first doc sample:', sample.slice(0, 4000));
+                            } catch (e) { console.warn('[typesense_search] debug sample failed:', e?.message || e); }
                         }
                         if (hits.length > 0) break;
                     } catch (e) {
