@@ -199,10 +199,14 @@ registerTool('typesense_search', {
         }
 
         try {
+            // Normalize identifiers: ensure strings and lowercase to avoid case mismatches
             const ids = Array.from(new Set([
                 ...(Array.isArray(objectIDs) ? objectIDs : []),
                 ...(objectID ? [objectID] : []),
-            ].filter(Boolean).map((v) => String(v))));
+            ]
+            .filter(Boolean)
+            .map((v) => String(v).trim())
+            .map((v) => v.toLowerCase())));
 
             if (client && ids.length > 0) {
                 // Retrieve by filter. Try objectID field first, then id
@@ -234,14 +238,14 @@ registerTool('typesense_search', {
                     const hit = hits.find((h) => {
                         const d = h?.document || {};
                         return [
-                            d.objectID,
-                            d.object_id,
-                            d.id,
-                            d.mpn,
-                            d.manufacturer_part_number,
-                            d.vendor_mpn,
-                            d.sku,
-                        ].some((v) => String(v || '') === String(oid));
+                            (d.objectID ? String(d.objectID).toLowerCase() : ''),
+                            (d.object_id ? String(d.object_id).toLowerCase() : ''),
+                            (d.id ? String(d.id).toLowerCase() : ''),
+                            (d.mpn ? String(d.mpn).toLowerCase() : ''),
+                            (d.manufacturer_part_number ? String(d.manufacturer_part_number).toLowerCase() : ''),
+                            (d.vendor_mpn ? String(d.vendor_mpn).toLowerCase() : ''),
+                            (d.sku ? String(d.sku).toLowerCase() : ''),
+                        ].some((v) => v === String(oid));
                     });
                     if (hit && hit.document) return mapRecord(hit.document);
                     return mapRecord({ objectID: oid });
